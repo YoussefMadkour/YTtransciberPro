@@ -58,28 +58,6 @@ def transcribe_youtube_videos(urls, channel_name, check_existing=True):
         transcribe_video(filename, output_file)
         os.remove(filename)  # Remove the video file after transcription
 
-def fetch_most_viewed(channel_id):
-    # Import YouTube Data API
-    from googleapiclient.discovery import build
-    # Set up the API
-    api_service_name = "youtube"
-    api_version = "v3"
-    DEVELOPER_KEY = "YOUR_API_KEY"  # Replace with your API key
-    youtube = build(api_service_name, api_version, developerKey=DEVELOPER_KEY)
-    # Perform the search
-    search_response = youtube.search().list(
-        channelId=channel_id,
-        order="viewCount",
-        type="video",
-        maxResults=50,  
-        part="id",
-    ).execute()
-    # Extract video URLs
-    urls = []
-    for search_result in search_response.get("items", []):
-        urls.append("https://www.youtube.com/watch?v=" + search_result["id"]["videoId"])
-    return urls
-
 def main():
     choice = input("Choose an option:\n1. Provide video links manually\n2. Transcribe all videos from a YouTube channel\n3. Specify the number of most popular videos to transcribe\n4. Fetch the top 50 most viewed videos from a YouTube channel (faster option)\n")
 
@@ -106,13 +84,6 @@ def main():
             channel_name = channel_info['title'].replace("/", "_")  # Avoid potential issues with slashes in directory names
             all_videos = sorted(channel_info['entries'], key=lambda x: x['view_count'], reverse=True)
             urls = [video['webpage_url'] for video in all_videos[:num_videos]]
-        transcribe_youtube_videos(urls, channel_name)
-    elif choice == "4":
-        channel_url = input("Enter the YouTube channel URL: ")
-        with youtube_dl.YoutubeDL() as ydl:
-            channel_info = ydl.extract_info(channel_url, download=False)
-            channel_name = channel_info['title'].replace("/", "_")  
-            urls = fetch_most_viewed(channel_info['id'])  # New function to fetch most viewed videos
         transcribe_youtube_videos(urls, channel_name)
     else:
         print("Invalid choice.")
