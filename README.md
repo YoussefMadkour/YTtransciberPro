@@ -22,6 +22,20 @@ Streamline YouTube video transcription with a powerful tool. Utilizes YouTube Da
 2. Follow the prompts to input YouTube channel URL or video links.
 3. Obtain transcriptions in seconds!
 
+## Details of Options
+
+1. **Provide video links manually:** You can manually enter YouTube video URLs that you want to transcribe.
+2. **Transcribe videos from a YouTube channel:** This will download and transcribe all videos from the inputted YouTube channel.
+3. **Specify the number of most popular videos to transcribe:** This option allows you to transcribe a specific number of the most viewed videos from a YouTube channel.
+4. **Fetch the top 50 most viewed videos from a YouTube channel:** This option utilizes the YouTube Data API to fetch the top 50 most viewed videos from a YouTube channel and transcribes them. The key reasons for this option are:
+
+   - **Improved Efficiency:** Instead of fetching all video links and then sorting by view count, we fetch only the top 50 most viewed videos directly. This reduces the data fetching and processing time significantly.
+   - **Resource Optimization:** The application needs to make fewer calls to the YouTube Data API and download fewer video details, reducing the resource usage.
+   - **Faster Results:** As fewer videos are processed, transcriptions can be delivered more quickly. Note, however, that due to the limitations of the YouTube Data API, it does not guarantee that the fetched videos are the absolute most viewed videos from the channel.
+
+
+
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
