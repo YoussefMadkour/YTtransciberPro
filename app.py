@@ -3,7 +3,8 @@ import speech_recognition as sr
 from pydub import AudioSegment
 import yt_dlp as youtube_dl
 
-def download_video(url, filename):
+def download_video(url, channel_name, video_title):
+    filename = f"{channel_name}/{video_title}"
     ydl_opts = {
         'format': 'bestaudio/best',
         'postprocessors': [{
@@ -11,12 +12,13 @@ def download_video(url, filename):
             'preferredcodec': 'wav',
             'preferredquality': '192',
         }],
-        'outtmpl': filename,
-        'quiet': True,
-        'keepvideo': True
+        'outtmpl': filename + '.%(ext)s',  # This will add the correct extension to the file
     }
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
+    return filename + '.wav'  # We know the file is a .wav file because we specified that in 'preferredcodec'
+
+
 
 def transcribe_video(video_path, output_file):
     audio = AudioSegment.from_wav(video_path)
@@ -40,81 +42,78 @@ def transcribe_video(video_path, output_file):
     print("Transcription completed!")
     os.remove("temp.wav")
 
-def transcribe_youtube_videos(urls, single_file=True):
-    if single_file:
-        output_file = "transcriptions.txt"
+def transcribe_youtube_videos(urls, channel_name, check_existing=True):
+    os.makedirs(channel_name, exist_ok=True)
     for i, url in enumerate(urls):
         print(f"Downloading video {i+1}/{len(urls)}...")
         with youtube_dl.YoutubeDL() as ydl:
             info_dict = ydl.extract_info(url, download=False)
-            video_title = info_dict.get('title', None)
-        filename = f"{video_title}.wav"
-        download_video(url, filename)
+            video_title = info_dict.get('title', None).replace("/", "_")  # Avoid potential issues with slashes in filenames
+        filename = download_video(url, channel_name, video_title)
         print("Download complete. Transcribing...")
-        if not single_file:
-            output_file = f"{video_title}.txt"
+        output_file = f"{channel_name}/{video_title}.txt"
+        if check_existing and os.path.isfile(output_file):  # Skip transcription if it already exists
+            print(f"Transcription for video {video_title} already exists. Skipping.")
+            continue
         transcribe_video(filename, output_file)
         os.remove(filename)  # Remove the video file after transcription
 
-def transcribe_youtube_channel(channel_url, num_videos=None, single_file=True):
-    if single_file:
-        output_file = "transcriptions.txt"
-
-    ydl_opts = {
-        'quiet': True,
-    }
-
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        playlist_dict = ydl.extract_info(channel_url, download=False)
-        playlist_url = playlist_dict.get('url', None)
-
-        video_urls = []
-        if playlist_url:
-            ydl.extract_info(playlist_url, download=False)
-            for entry in playlist_dict['entries']:
-                if entry:
-                    video_urls.append(entry['webpage_url'])
-
-    if num_videos is not None:
-        if num_videos == 1:
-            # Sort videos by view count in descending order and choose the most popular video
-            video_urls.sort(key=lambda x: x['view_count'], reverse=True)
-            video_urls = video_urls[:1]
-        elif num_videos > 1 and num_videos < len(video_urls):
-            # Sort videos by view count in descending order and choose the most popular videos based on the number provided
-            video_urls.sort(key=lambda x: x['view_count'], reverse=True)
-            video_urls = video_urls[:num_videos]
-
-    for i, url in enumerate(video_urls):
-        print(f"Downloading video {i+1}/{len(video_urls)}...")
-        with youtube_dl.YoutubeDL() as ydl:
-            info_dict = ydl.extract_info(url, download=False)
-            video_title = info_dict.get('title', None)
-        filename = f"{video_title}.wav"
-        download_video(url, filename)
-        print("Download complete. Transcribing...")
-        if not single_file:
-            output_file = f"{video_title}.txt"
-        transcribe_video(filename, output_file)
-        os.remove(filename)  # Remove the video file after transcription
+def fetch_most_viewed(channel_id):
+    # Import YouTube Data API
+    from googleapiclient.discovery import build
+    # Set up the API
+    api_service_name = "youtube"
+    api_version = "v3"
+    DEVELOPER_KEY = "YOUR_API_KEY"  # Replace with your API key
+    youtube = build(api_service_name, api_version, developerKey=DEVELOPER_KEY)
+    # Perform the search
+    search_response = youtube.search().list(
+        channelId=channel_id,
+        order="viewCount",
+        type="video",
+        maxResults=50,  
+        part="id",
+    ).execute()
+    # Extract video URLs
+    urls = []
+    for search_result in search_response.get("items", []):
+        urls.append("https://www.youtube.com/watch?v=" + search_result["id"]["videoId"])
+    return urls
 
 def main():
-    choice = input("Choose an option:\n1. Transcribe videos from a YouTube channel\n2. Specify the number of most popular videos to transcribe\n3. Specify the number of videos to transcribe and provide video links manually\n")
+    choice = input("Choose an option:\n1. Provide video links manually\n2. Transcribe all videos from a YouTube channel\n3. Specify the number of most popular videos to transcribe\n4. Fetch the top 50 most viewed videos from a YouTube channel (faster option)\n")
 
     if choice == "1":
-        channel_url = input("Enter the YouTube channel URL: ")
-        transcribe_youtube_channel(channel_url, single_file=False)
-    elif choice == "2":
-        channel_url = input("Enter the YouTube channel URL: ")
-        num_videos = int(input("Enter the number of most popular videos to transcribe: "))
-        transcribe_youtube_channel(channel_url, num_videos=num_videos, single_file=False)
-    elif choice == "3":
         num_links = int(input("Enter the number of video links: "))
         urls = []
         for i in range(num_links):
             url = input(f"Enter video link {i+1}: ")
             urls.append(url)
-        transcribe_youtube_videos(urls, single_file=False)
+        channel_name = input("Enter a name for the manual channel: ")
+        transcribe_youtube_videos(urls, channel_name, check_existing=False)
+    elif choice == "2":
+        channel_url = input("Enter the YouTube channel URL: ")
+        with youtube_dl.YoutubeDL() as ydl:
+            channel_info = ydl.extract_info(channel_url, download=False)
+            channel_name = channel_info['title'].replace("/", "_")  # Avoid potential issues with slashes in directory names
+            urls = [video['webpage_url'] for video in channel_info['entries']]
+        transcribe_youtube_videos(urls, channel_name)
+    elif choice == "3":
+        channel_url = input("Enter the YouTube channel URL: ")
+        num_videos = int(input("Enter the number of most popular videos to transcribe: "))
+        with youtube_dl.YoutubeDL() as ydl:
+            channel_info = ydl.extract_info(channel_url, download=False)
+            channel_name = channel_info['title'].replace("/", "_")  # Avoid potential issues with slashes in directory names
+            all_videos = sorted(channel_info['entries'], key=lambda x: x['view_count'], reverse=True)
+            urls = [video['webpage_url'] for video in all_videos[:num_videos]]
+        transcribe_youtube_videos(urls, channel_name)
+    elif choice == "4":
+        channel_url = input("Enter the YouTube channel URL: ")
+        with youtube_dl.YoutubeDL() as ydl:
+            channel_info = ydl.extract_info(channel_url, download=False)
+            channel_name = channel_info['title'].replace("/", "_")  
+            urls = fetch_most_viewed(channel_info['id'])  # New function to fetch most viewed videos
+        transcribe_youtube_videos(urls, channel_name)
     else:
         print("Invalid choice.")
 
